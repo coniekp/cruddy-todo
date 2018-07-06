@@ -2,53 +2,84 @@ const fs = require('fs');
 const path = require('path');
 const _ = require('underscore');
 const counter = require('./counter');
+const Promise = require('bluebird');
+
+const promisifiedReadFile = Promise.promisify(fs.readFile);
 
 var items = {};
 
 // Public API - Fix these CRUD functions ///////////////////////////////////////
 
 exports.create = (text, callback) => {
-  var id = counter.getNextUniqueId();
-  items[id] = text;
-  callback(null, {id: id, text: text});
+  counter.getNextUniqueId((err, id) => {
+    var filePath = path.join(exports.dataDir, `${id}.txt`);
+    fs.writeFile(filePath, text, (err) => {
+      if (err) {
+        callback(err);
+      } else {
+        callback(null, {id, text});
+      }
+    });
+  });
 };
 
 exports.readOne = (id, callback) => {
-  var item = items[id];
-  if (!item) {
-    callback(new Error(`No item with id: ${id}`));
-  } else {
-    callback(null, {id: id, text: item});
-  }
+  var filePath = path.join(exports.dataDir, `${id}.txt`);
+  fs.readFile(filePath, (err, text) => {
+    if (err) {
+      callback (new Error(`No item with id: ${id}`));
+    } else {
+      callback(null, {id: id, text: text.toString()});
+    }
+  });
+  //data's map func needs a return value, but fs.readfile is async so will not return the expected data 
+  //  => need to instead promisify readfile && do work on return promise
+  //map should turn an array of files into an array of promisses. when promises come back, we can call .all on the returned values
 };
 
 exports.readAll = (callback) => {
-  var data = [];
-  _.each(items, (item, idx) => {
-    data.push({ id: idx, text: items[idx] });
+
+  fs.readdir(exports.dataDir, (err, files) => {
+
+    if (err) {
+      throw (err);
+    } 
+    
+    var data = _.map(files, (file) => {
+      var id = path.basename(file, '.txt');
+      let filePath = path.join(exports.dataDir, `${id}.txt`);
+      return promisifiedReadFile(filePath).then((text) => { 
+        return {id: id, text: text.toString()};
+      });
+    });
+
+    Promise.all(data).then((data) => callback(null, data), (err) => callback(err));
   });
-  callback(null, data);
 };
 
 exports.update = (id, text, callback) => {
-  var item = items[id];
-  if (!item) {
-    callback(new Error(`No item with id: ${id}`));
-  } else {
-    items[id] = text;
-    callback(null, {id: id, text: text});
-  }
+  var filePath = path.join(exports.dataDir, `${id}.txt`);
+  fs.readFile(filePath, (err) =>{
+    if (err) {
+      callback (new Error(`No item with id: ${id}`));
+    } else {
+      fs.writeFile(filePath, text, (err) => {
+        if (err) { throw err; }
+        callback(null, text.toString());
+      });
+    }
+  });
 };
 
 exports.delete = (id, callback) => {
-  var item = items[id];
-  delete items[id];
-  if(!item) {
-    // report an error if item not found
-    callback(new Error(`No item with id: ${id}`))
-  } else {
-    callback();
-  }
+  var filePath = path.join(exports.dataDir, `${id}.txt`);
+  fs.unlink(filePath, (err) =>{
+    if (err) {
+      callback(new Error(`No item with id: ${id}`));
+    } else {
+      callback();
+    }
+  });
 };
 
 // Config+Initialization code -- DO NOT MODIFY /////////////////////////////////
