@@ -53,7 +53,10 @@ exports.readAll = (callback) => {
       });
     });
 
-    Promise.all(data).then((data) => callback(null, data), (err) => callback(err));
+    Promise.all(data)
+      .then((data) => callback(null, data))
+      .catch((err) => callback(err))
+      .done();
   });
 };
 
@@ -65,10 +68,21 @@ exports.update = (id, text, callback) => {
     } else {
       fs.writeFile(filePath, text, (err) => {
         if (err) { throw err; }
-        callback(null, text.toString());
+        callback(null, {id, text});
       });
     }
   });
+
+  //OR WITH EXISTSSYNC
+  // if(fs.existsSync(filePath)) {
+  //   fs.writeFile(filePath, text, (err) => { 
+  //     if(err){
+  //       throw err;
+  //     } else {
+  //       callback( null, {id, text});
+  //     }
+  //   });
+
 };
 
 exports.delete = (id, callback) => {
